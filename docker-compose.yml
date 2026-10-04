@@ -1,0 +1,35 @@
+services:
+
+  db:
+    image: postgres:16
+    container_name: advertisements_postgres
+
+    environment:
+      POSTGRES_DB: advertisements
+      POSTGRES_USER: ads_user
+      POSTGRES_PASSWORD: ads_password
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ads_user -d advertisements"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  api:
+    build: .
+    container_name: advertisements_api
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    ports:
+      - "8000:8000"
+
+
+volumes:
+  postgres_data:
