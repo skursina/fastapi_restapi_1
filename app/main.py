@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy import String, select
@@ -118,7 +119,9 @@ async def search_advertisements(
     description: str | None = None,
     author: str | None = None,
     price: int | None = None,
+    created_at: date | None = None,
     db: AsyncSession = Depends(get_db)):
+
     query = select(Advertisement)
 
     if title is not None:
@@ -146,6 +149,22 @@ async def search_advertisements(
         query = query.where(
             Advertisement.price == price
         )
+
+
+    if created_at is not None:
+        start_of_day = datetime.combine(
+            created_at,
+            time.min,
+            tzinfo=timezone.utc,
+        )
+
+        start_of_next_day = start_of_day + timedelta(days=1)
+
+        query = query.where(
+            Advertisement.created_at >= start_of_day,
+            Advertisement.created_at < start_of_next_day,
+        )
+
 
     result = await db.execute(query)
 

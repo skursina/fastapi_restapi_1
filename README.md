@@ -287,6 +287,7 @@ DELETE /advertisement/1
 - `description`
 - `author`
 - `price`
+- `created_at`
 
 Параметры можно использовать отдельно или совместно.
 
@@ -306,6 +307,12 @@ GET /advertisement?author=Светлана
 
 ```http
 GET /advertisement?price=70000
+```
+
+### Поиск по дате создания
+
+```http
+GET /advertisement?created_at=2026-01-06
 ```
 
 ### Комбинированный поиск
