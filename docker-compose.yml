@@ -30,6 +30,11 @@ services:
     ports:
       - "8000:8000"
 
+    environment:
+      JWT_SECRET_KEY: "my-super-secret-key-for-course"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "admin12345"
+
 
 volumes:
   postgres_data:

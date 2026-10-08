@@ -1,6 +1,59 @@
-from datetime import datetime
+from datetime import datetime, date
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class UserGroup(str, Enum):
+    USER = "user"
+    ADMIN = "admin"
+
+
+class UserCreate(BaseModel):
+    username: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    password: str = Field(
+        min_length=4,
+    )
+
+    group: UserGroup = UserGroup.USER
+
+
+class UserUpdate(BaseModel):
+    username: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    password: str | None = Field(
+        default=None,
+        min_length=4,
+    )
+
+    group: UserGroup | None = None
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    group: UserGroup
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
 
 
 class AdvertisementCreate(BaseModel):

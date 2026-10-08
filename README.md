@@ -31,6 +31,7 @@ fastapi_advertisements/
 │   ├── __init__.py
 │   ├── database.py       # Подключение к PostgreSQL
 │   ├── main.py           # FastAPI-приложение и API endpoints
+|   ├── auth.py           # JWT, хеширование паролей, зависимости авторизации
 │   ├── models.py         # SQLAlchemy-модели
 │   └── schemas.py        # Pydantic-схемы
 │
@@ -48,7 +49,7 @@ fastapi_advertisements/
 Приложение состоит из двух Docker-контейнеров:
 
 ```text
-                HTTP
+                HTTP + JWT
                  │
                  ▼
         ┌─────────────────┐
@@ -74,6 +75,37 @@ db:5432
 ```
 
 Порт PostgreSQL наружу не публикуется, поэтому конфликт с локальным PostgreSQL отсутствует.
+
+---
+
+## 🔐 Роли и права доступа
+
+В системе две группы пользователей: `user` и `admin`.
+
+|Эндпоинт | Аноним | User | Admin |
+|-----------|-----------|-------|-------|
+|`POST /login` |✅ |✅ |✅ |
+|`POST /user` (group=user) |✅ |✅ |✅ |
+|`POST /user` (group=admin)|❌ 403|❌ 403	|✅|
+|`GET /user/{id}` |✅ |✅ |✅|
+|`GET /user` (список) |❌ 401|❌ 403|✅|
+|`PATCH /user/{id}` (себя) |❌ 401|✅|✅|
+|`PATCH /user/{id}` (другого) |❌ 401 |❌ 403	|✅|
+|`PATCH /user/{id}` (смена group) |❌ 401|❌ 403|✅|
+|`DELETE /user/{id}` (себя) |❌ 401|✅ |✅ |
+|`DELETE /user/{id}` (другого) |❌ 401 |❌ 403 |✅|
+|`GET /advertisement/{id}` |✅ |✅ |✅|
+|`GET /advertisement?query`	|✅ |✅ |✅|
+|`POST /advertisement` |❌ 401 |✅ |✅|
+|`PATCH /advertisement/{id}` (своё) |❌ 401|✅ |✅|
+|`PATCH /advertisement/{id}` (чужое)|❌ 401|❌ 403|✅|
+|`DELETE /advertisement/{id}` (своё) |❌ 401	|✅ |✅|
+|`DELETE /advertisement/{id}` (чужое) |❌ 401|❌ 403 |✅|
+
+Разница между **401** и **403**:
+- **401 Unauthorized** — токен не передан или невалиден.
+- **403 Forbidden** — токен валиден, но прав на действие нет.
+
 
 ---
 
@@ -162,6 +194,82 @@ http://localhost:8000/redoc
 ---
 
 # 🔌 API
+
+## Пользователи
+
+### `POST /user`
+
+Публичная регистрация. Аноним и обычный пользователь могут создать только пользователя группы `user`. Создать `admin` может только действующий администратор.
+
+**Request**
+
+```json
+{
+    "username": "ivan",
+    "password": "secret123",
+    "group": "user"
+}
+```
+
+**Response**
+```json
+{
+    "id": 2,
+    "username": "ivan",
+    "group": "user"
+}
+```
+
+- **409 Conflict** — username уже занят.
+- **403 Forbidden** — попытка создать admin без прав.
+
+
+### `GET /user/{user_id}`
+
+Публичное получение пользователя по id.
+
+```http
+GET /user/1
+```
+
+
+### `GET /user`
+
+Список всех пользователей. **Только для админа**.
+- `401` без токена, `403` — для группы user.
+
+
+### `PATCH /user/{user_id}`
+
+Частичное обновление.
+
+- Обычный пользователь — только **свой** профиль.
+
+- Админ — любой.
+
+- Смена group — только админом.
+
+- Пароль хранится в виде хеша (argon2).
+
+Пример
+```json
+{
+    "password": "new-secret-123"
+}
+```
+
+Ответ — обновлённый объект пользователя. При занятом `username` → `409`.
+
+
+### `DELETE /user/{user_id}`
+
+- Пользователь — только себя.
+
+- Админ — любого, **кроме последнего админа** (защита от потери управления).
+
+Удаление пользователя каскадно удаляет его объявления (`ON DELETE CASCADE`).
+
+---
 
 ## Создание объявления
 
@@ -341,11 +449,18 @@ GET /advertisement?author=Светлана&price=70000
 
 # 🗄 Модель данных
 
-В PostgreSQL создаётся таблица:
+В PostgreSQL создаются таблицы:
 
-```text
-advertisements
-```
+## Таблица `users`
+
+|Поле |	Тип | Описание |
+|---|---|---|
+|`id`	|Integer	|Уникальный идентификатор|
+|`username`	|String(100) |Логин, уникальный|
+|`password_hash`|String(255)|Хеш пароля (argon2)|
+|`group`|String(20)	|`user` или `admin`|
+
+## Таблица `advertisements`
 
 | Поле | Тип | Описание |
 |---|---|---|
